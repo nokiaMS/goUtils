@@ -30,40 +30,77 @@ func GetRandomString(l int) string{
 	return string(result)
 }
 
-//向数据库中批量写入数据.
-func ldbWriteBatchBySingle(db *leveldb.DB, cnt int, l int) (int, error) {
-	//构造数据.
+const batchCnt = 10000
+
+//向buffer中填充数据.
+func fillData(from int, cnt int, l int) *map[string]string{
 	items := make(map[string]string)
-	for i:= 0; i < cnt; i++ {
-		k := KEYPREFIX + strconv.Itoa(i)
+	for j := 0; j < cnt; j++ {
+		k := KEYPREFIX + strconv.Itoa(j+cnt * from)
 		items[k] = GetRandomString(l)
 		//fmt.Printf("key: %s, value: %s\n", k, items[k])
 	}
+	return &items
+}
 
-	startTime := time.Now().UnixNano()
-	for i:=0; i < cnt; i++ {
-		k := KEYPREFIX + strconv.Itoa(i)
-		err := ldbWrite(db,k,items[k])
+func showTimeResult(start int64, end int64, total int, curRound int)  {
+	timems := float32(end-start)/float32(1000)/float32(1000)
+	fmt.Printf("Total items: %d, time: %v ms, rate %v items per sec.\n", total, timems, float32(curRound)/timems * 1000)
+}
+
+func writeToDB(items *map[string]string, db *leveldb.DB, round int) (int, error)  {
+	for k, v := range *items {
+		err := ldbWrite(db, k, v)
 		if err != nil {
-			return i, fmt.Errorf("Error when ldbWrite. key %s\n", k)
+			index,_ := strconv.Atoi(k)
+			return 0, fmt.Errorf("Error when ldbWrite %d. key %s\n", batchCnt * round + index, k)
 		}
 	}
-	endTime := time.Now().UnixNano()
-	fmt.Printf("Total items: %d, time: %d ms\n", cnt, (endTime - startTime)/1000.0/1000.0)
+	return 0, nil
+}
+
+//向数据库中批量写入数据.
+func ldbWriteBatchBySingle(db *leveldb.DB, cnt int, l int) (int, error) {
+	//构造数据.
+	partCnt := cnt/batchCnt
+	remainItemCnt := cnt - batchCnt * partCnt
+
+	for i := 0; i < partCnt; i++ {		//strconv.itoa很耗时.
+		items := fillData(batchCnt * (i-1), batchCnt, l)
+		startTime := time.Now().UnixNano()
+		writeToDB(items, db, i)
+		endTime := time.Now().UnixNano()
+		showTimeResult(startTime, endTime, batchCnt*(i+1), batchCnt)
+	}
+
+	//处理最后不足batchCnt的部分.
+	items := fillData(batchCnt * partCnt, remainItemCnt, l)
+	writeToDB(items, db, partCnt)
 	return cnt, nil
 }
 
 //从数据库中批量读取数据.
-func ldbReadBatch(db * leveldb.DB, from int, to int) (int, error)  {
+func ldbReadBatchBySingle(db * leveldb.DB, from int, to int, size int, checkLen bool) (int, error)  {
 	n := 0
-	startTime := time.Now().UnixNano()
-	for i:= from; i < to; i++ {
+	keys := []string{}	//变量不能作为数组长度,数组长度必须是在编译的时候能够确定的,这点和C语言是一样的.
+	//构造keys.
+	for i := from; i < to; i++ {
 		k := KEYPREFIX + strconv.Itoa(i)
-		ldbRead(db,k)
+		keys = append(keys, k)
+	}
+
+	startTime := time.Now().UnixNano()
+	for _, v := range keys {
+		ret,_ := ldbRead(db, v)
+		if checkLen {
+			if len(ret) != size {
+				fmt.Println("Size of data does not match with the data length in db.")
+			}
+		}
 		n += 1
 	}
 	endTime := time.Now().UnixNano()
-	fmt.Printf("Total items: %d, time: %d ms\n", n, (endTime - startTime)/1000.0/1000.0)
+	showTimeResult(startTime, endTime, n, n)
 	return n, nil
 }
 
@@ -80,18 +117,20 @@ const (
 	BATCHREAD = "batchRead"
 	SINGLEWRITE = "singleWrite"
 	SINGLEREAD = "singleRead"
-	KEYPREFIX = "TEST_KEY_"
+	KEYPREFIX = "TEST_KEY100_"
 )
+
+var modeDesc = "test mode: " + BATCHWRITE + " " + BATCHREAD + " " + SINGLEWRITE + " " + SINGLEREAD + "."
 
 func main() {
 	path := flag.String("db", `F:\tmp\testldb`, "level db path.")
-	mode := flag.String("mode", "batchRead", "test mode: batchWrite | batchRead | singleWrite | singleRead.")
-	count := flag.Int("count", 100000, "Count of the values to write to or read from the db.")
-	datalen := flag.Int("datalen", 100, "the length of per data to write into the database.")
+	mode := flag.String("mode", BATCHREAD, modeDesc)
+	count := flag.Int("count", 1000000, "Count of the values to write to db.")
+	datalen := flag.Int("datalen", 10, "the length of per data to write into the database.")
 	key := flag.String("key", "gx111", "key only for singleWrite or singleRead mode.")
 	value := flag.String("value", "222222222222222222abfef", "value only for singleWrite mode.")
 	from := flag.Int("from", 0,"Read batch from 'from'")
-	to := flag.Int("to", 100000, "Read batch from 'to'")
+	to := flag.Int("to", 10000, "Read batch from 'to'")
 
 	//创建或者打开ldb.
 	db, err := leveldb.OpenFile(*path,nil)	// ``代表是原始字符串,不需要转义.
@@ -142,7 +181,7 @@ func main() {
 			fmt.Println("from or to parameter is wrong.")
 			return
 		}
-		_, err := ldbReadBatch(db, *from, *to)
+		_, err := ldbReadBatchBySingle(db, *from, *to, *datalen, true)
 		if err != nil {
 			fmt.Println(err)
 		} else {

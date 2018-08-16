@@ -117,7 +117,7 @@ const (
 	BATCHREAD = "batchRead"
 	SINGLEWRITE = "singleWrite"
 	SINGLEREAD = "singleRead"
-	KEYPREFIX = "TEST_KEY100_"
+	KEYPREFIX = "TEST_KEY_"
 )
 
 var modeDesc = "test mode: " + BATCHWRITE + " " + BATCHREAD + " " + SINGLEWRITE + " " + SINGLEREAD + "."
@@ -128,9 +128,11 @@ func main() {
 	count := flag.Int("count", 1000000, "Count of the values to write to db.")
 	datalen := flag.Int("datalen", 10, "the length of per data to write into the database.")
 	key := flag.String("key", "gx111", "key only for singleWrite or singleRead mode.")
-	value := flag.String("value", "222222222222222222abfef", "value only for singleWrite mode.")
+	value := flag.String("value", "abcdefghigklmnopqrstuvwxyz", "value only for singleWrite mode.")
 	from := flag.Int("from", 0,"Read batch from 'from'")
 	to := flag.Int("to", 10000, "Read batch from 'to'")
+
+	flag.Parse()	//如果不添加这句话程序运行不会出错,但是 program --help的话不会打印出帮助信息.
 
 	//创建或者打开ldb.
 	db, err := leveldb.OpenFile(*path,nil)	// ``代表是原始字符串,不需要转义.

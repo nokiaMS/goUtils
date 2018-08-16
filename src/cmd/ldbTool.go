@@ -183,7 +183,7 @@ func main() {
 			fmt.Println("from or to parameter is wrong.")
 			return
 		}
-		_, err := ldbReadBatchBySingle(db, *from, *to, *datalen, true)
+		_, err := ldbReadBatchBySingle(db, *from, *to, *datalen, false)
 		if err != nil {
 			fmt.Println(err)
 		} else {

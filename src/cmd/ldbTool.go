@@ -113,18 +113,22 @@ func ldbRead(db *leveldb.DB, key string)([]byte, error)  {
 }
 
 const (
-	BATCHWRITE = "batchWrite"
-	BATCHREAD = "batchRead"
+	BATCHWRITE = "batchWriteBySingle"
+	BATCHREAD = "batchReadBySingle"
 	SINGLEWRITE = "singleWrite"
 	SINGLEREAD = "singleRead"
 	KEYPREFIX = "TEST_KEY_"
 )
 
-var modeDesc = "test mode: " + BATCHWRITE + " " + BATCHREAD + " " + SINGLEWRITE + " " + SINGLEREAD + "."
+var usage = `batchWriteBySingle: need -db, -count, -datalen
+        batchReadBySingle: need -db, -from, -to
+        singleWrite: -db,-key, -value
+        singleRead: -db, -key
+        `
 
 func main() {
 	path := flag.String("db", `F:\tmp\testldb`, "level db path.")
-	mode := flag.String("mode", BATCHREAD, modeDesc)
+	mode := flag.String("mode", BATCHREAD, usage)
 	count := flag.Int("count", 1000000, "Count of the values to write to db.")
 	datalen := flag.Int("datalen", 10, "the length of per data to write into the database.")
 	key := flag.String("key", "gx111", "key only for singleWrite or singleRead mode.")
